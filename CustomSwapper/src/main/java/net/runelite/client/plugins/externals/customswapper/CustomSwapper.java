@@ -8,9 +8,9 @@ package net.runelite.client.plugins.externals.customswapper;
 import com.google.common.base.Splitter;
 import com.google.inject.Provides;
 import java.awt.AWTException;
+import java.awt.Color;
 import java.awt.Rectangle;
 import java.awt.Robot;
-import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -19,12 +19,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.InventoryID;
 import net.runelite.api.Item;
 import net.runelite.api.ItemContainer;
-import net.runelite.api.Point;
 import net.runelite.api.Prayer;
 import net.runelite.api.VarClientInt;
 import net.runelite.api.events.CommandExecuted;
@@ -36,28 +36,29 @@ import net.runelite.api.widgets.WidgetItem;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
-import net.runelite.client.flexo.Flexo;
 import net.runelite.client.input.KeyManager;
 import net.runelite.client.plugins.Plugin;
+import net.runelite.client.plugins.PluginDependency;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.PluginType;
-import net.runelite.client.plugins.externals.customswapper.utils.PrayerMap;
-import net.runelite.client.plugins.externals.customswapper.utils.Spells;
-import net.runelite.client.plugins.externals.customswapper.utils.Tab;
-import net.runelite.client.plugins.externals.customswapper.utils.TabUtils;
-import net.runelite.client.plugins.stretchedmode.StretchedModeConfig;
+import net.runelite.client.plugins.externals.utils.ExtUtils;
+import net.runelite.client.plugins.externals.utils.Tab;
 import net.runelite.client.util.Clipboard;
+import net.runelite.client.util.ColorUtil;
 import net.runelite.client.util.HotkeyListener;
 import org.apache.commons.lang3.tuple.Pair;
+import org.pf4j.Extension;
 
+@Extension
 @PluginDescriptor(
 	name = "Custom Swapper",
 	description = "Use plugin in PvP situations for best results",
 	tags = {"op", "af"},
-	type = PluginType.EXTERNAL
+	type = PluginType.UTILITY
 )
 @Slf4j
 @SuppressWarnings("unused")
+@PluginDependency(ExtUtils.class)
 public class CustomSwapper extends Plugin
 {
 	private static final Splitter NEWLINE_SPLITTER = Splitter
@@ -67,16 +68,18 @@ public class CustomSwapper extends Plugin
 
 	@Inject
 	private Client client;
+
 	@Inject
 	private KeyManager keyManager;
+
 	@Inject
 	private CustomSwapperConfig config;
-	@Inject
-	private ConfigManager configManager;
+
 	@Inject
 	private EventBus eventBus;
+
 	@Inject
-	private TabUtils tabUtils;
+	private ExtUtils utils;
 
 	private ExecutorService executor;
 	private Robot robot;
@@ -91,7 +94,6 @@ public class CustomSwapper extends Plugin
 	protected void startUp() throws AWTException
 	{
 		executor = Executors.newFixedThreadPool(1);
-		Flexo.client = client;
 		robot = new Robot();
 		if (client.getGameState() == GameState.LOGGED_IN)
 		{
@@ -202,6 +204,7 @@ public class CustomSwapper extends Plugin
 
 			if (e == null)
 			{
+				log.error("CopyCS: Can't find equipment container.");
 				return;
 			}
 
@@ -240,6 +243,8 @@ public class CustomSwapper extends Plugin
 			}
 			catch (IndexOutOfBoundsException e)
 			{
+				log.error("Decode: Invalid Syntax in decoder.");
+				dispatchError("Invalid Syntax in decoder.");
 				return;
 			}
 		}
@@ -257,6 +262,7 @@ public class CustomSwapper extends Plugin
 
 					if (rect == null)
 					{
+						log.debug("Equip: Can't find valid bounds for param {}.", param);
 						continue;
 					}
 
@@ -269,12 +275,13 @@ public class CustomSwapper extends Plugin
 
 					if (rectangleList.isEmpty())
 					{
+						log.debug("Clean: Can't find valid bounds for param {}.", param);
 						continue;
 					}
 
-					for (Rectangle rectangle : rectangleList)
+					for (Rectangle rect : rectangleList)
 					{
-						rectPairs.add(Pair.of(Tab.INVENTORY, rectangle));
+						rectPairs.add(Pair.of(Tab.INVENTORY, rect));
 					}
 				}
 				break;
@@ -284,6 +291,7 @@ public class CustomSwapper extends Plugin
 
 					if (rect == null)
 					{
+						log.debug("Remove: Can't find valid bounds for param {}.", param);
 						continue;
 					}
 
@@ -292,7 +300,7 @@ public class CustomSwapper extends Plugin
 				break;
 				case "prayer":
 				{
-					final WidgetInfo info = PrayerMap.getWidget(param);
+					final WidgetInfo info = utils.getPrayerWidgetInfo(param);
 					final Prayer p = Prayer.valueOf(param.toUpperCase().replace(" ", "_"));
 
 					if (config.enablePrayCheck() && client.isPrayerActive(p))
@@ -302,6 +310,7 @@ public class CustomSwapper extends Plugin
 
 					if (info == null)
 					{
+						log.debug("Prayer: Can't find valid widget info for param {}.", param);
 						continue;
 					}
 
@@ -309,6 +318,7 @@ public class CustomSwapper extends Plugin
 
 					if (widget == null)
 					{
+						log.debug("Prayer: Can't find valid widget for param {}.", param);
 						continue;
 					}
 
@@ -317,10 +327,11 @@ public class CustomSwapper extends Plugin
 				break;
 				case "cast":
 				{
-					final WidgetInfo info = Spells.getWidget(param);
+					final WidgetInfo info = utils.getSpellWidgetInfo(param);
 
 					if (info == null)
 					{
+						log.debug("Cast: Can't find valid widget info for param {}.", param);
 						continue;
 					}
 
@@ -328,6 +339,7 @@ public class CustomSwapper extends Plugin
 
 					if (widget == null)
 					{
+						log.debug("Cast: Can't find valid widget for param {}.", param);
 						continue;
 					}
 
@@ -340,6 +352,7 @@ public class CustomSwapper extends Plugin
 
 					if (widget == null)
 					{
+						log.debug("Spec: Can't find valid widget");
 						continue;
 					}
 
@@ -353,11 +366,32 @@ public class CustomSwapper extends Plugin
 		{
 			for (Pair<Tab, Rectangle> pair : rectPairs)
 			{
+				int key = utils.getTabHotkey(pair.getLeft());
+
+				if (key == -1 || key == 0)
+				{
+					log.error("Unable to find key for tab.");
+					dispatchError("Unable to find " + pair.getLeft().toString() + " hotkey.");
+					break;
+				}
+
 				executePair(pair);
+				log.debug("Executing click on: {}", pair);
+
+				try
+				{
+					Thread.sleep(getMillis());
+				}
+				catch (InterruptedException e)
+				{
+					e.printStackTrace();
+				}
 			}
+
 			if (config.swapBack())
 			{
-				robot.keyPress(tabUtils.getTabHotkey(Tab.INVENTORY));
+				log.debug("Swapping back to inventory.");
+				robot.keyPress(utils.getTabHotkey(Tab.INVENTORY));
 			}
 		});
 	}
@@ -370,48 +404,59 @@ public class CustomSwapper extends Plugin
 				if (client.getVar(VarClientInt.INTERFACE_TAB) != InterfaceTab.COMBAT.getId())
 				{
 					robot.delay((int) getMillis());
-					robot.keyPress(tabUtils.getTabHotkey(pair.getLeft()));
+					robot.keyPress(utils.getTabHotkey(pair.getLeft()));
 					robot.delay((int) getMillis());
 				}
-				handleSwitch(pair.getRight());
+				utils.click(pair.getRight());
 				break;
 			case EQUIPMENT:
 				if (client.getVar(VarClientInt.INTERFACE_TAB) != InterfaceTab.EQUIPMENT.getId())
 				{
 					robot.delay((int) getMillis());
-					robot.keyPress(tabUtils.getTabHotkey(pair.getLeft()));
+					robot.keyPress(utils.getTabHotkey(pair.getLeft()));
 					robot.delay((int) getMillis());
 				}
-				handleSwitch(pair.getRight());
+				utils.click(pair.getRight());
 				break;
 			case INVENTORY:
 				if (client.getVar(VarClientInt.INTERFACE_TAB) != InterfaceTab.INVENTORY.getId())
 				{
 					robot.delay((int) getMillis());
-					robot.keyPress(tabUtils.getTabHotkey(pair.getLeft()));
+					robot.keyPress(utils.getTabHotkey(pair.getLeft()));
 					robot.delay((int) getMillis());
 				}
-				handleSwitch(pair.getRight());
+				utils.click(pair.getRight());
 				break;
 			case PRAYER:
 				if (client.getVar(VarClientInt.INTERFACE_TAB) != InterfaceTab.PRAYER.getId())
 				{
 					robot.delay((int) getMillis());
-					robot.keyPress(tabUtils.getTabHotkey(pair.getLeft()));
+					robot.keyPress(utils.getTabHotkey(pair.getLeft()));
 					robot.delay((int) getMillis());
 				}
-				handleSwitch(pair.getRight());
+				utils.click(pair.getRight());
 				break;
 			case SPELLBOOK:
 				if (client.getVar(VarClientInt.INTERFACE_TAB) != InterfaceTab.SPELLBOOK.getId())
 				{
 					robot.delay((int) getMillis());
-					robot.keyPress(tabUtils.getTabHotkey(pair.getLeft()));
+					robot.keyPress(utils.getTabHotkey(pair.getLeft()));
 					robot.delay((int) getMillis());
 				}
-				handleSwitch(pair.getRight());
+				utils.click(pair.getRight());
 				break;
 		}
+	}
+
+	private void dispatchError(String error)
+	{
+		String str = ColorUtil.wrapWithColorTag("Custom Swapper", Color.MAGENTA)
+			+ " has encountered an "
+			+ ColorUtil.wrapWithColorTag("error", Color.RED)
+			+ ": "
+			+ error;
+
+		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", str, null);
 	}
 
 	private Rectangle invBounds(int id)
@@ -468,99 +513,9 @@ public class CustomSwapper extends Plugin
 		return null;
 	}
 
-	private void handleSwitch(Rectangle rectangle)
-	{
-		if (rectangle == null)
-		{
-			return;
-		}
-
-		final Point cp = getClickPoint(rectangle);
-
-		if (cp.getX() >= 1 && cp.getY() >= 1)
-		{
-			leftClick(cp.getX(), cp.getY());
-			try
-			{
-				Thread.sleep(getMillis());
-			}
-			catch (InterruptedException e)
-			{
-				e.printStackTrace();
-			}
-		}
-	}
-
 	private long getMillis()
 	{
 		return (long) (Math.random() * config.randLow() + config.randHigh());
-	}
-
-	private void leftClick(int x, int y)
-	{
-		final double scalingFactor = configManager.getConfig(StretchedModeConfig.class).scalingFactor();
-		if (client.isStretchedEnabled())
-		{
-			if (client.getMouseCanvasPosition().getX() != x ||
-				client.getMouseCanvasPosition().getY() != y)
-			{
-				moveMouse(x, y);
-			}
-
-			double scale = 1 + (scalingFactor / 100);
-
-			MouseEvent mousePressed =
-				new MouseEvent(client.getCanvas(), 501, System.currentTimeMillis(), 0, (int) (client.getMouseCanvasPosition().getX() * scale), (int) (client.getMouseCanvasPosition().getY() * scale), 1, false, 1);
-			client.getCanvas().dispatchEvent(mousePressed);
-			MouseEvent mouseReleased =
-				new MouseEvent(client.getCanvas(), 502, System.currentTimeMillis(), 0, (int) (client.getMouseCanvasPosition().getX() * scale), (int) (client.getMouseCanvasPosition().getY() * scale), 1, false, 1);
-			client.getCanvas().dispatchEvent(mouseReleased);
-			MouseEvent mouseClicked =
-				new MouseEvent(client.getCanvas(), 500, System.currentTimeMillis(), 0, (int) (client.getMouseCanvasPosition().getX() * scale), (int) (client.getMouseCanvasPosition().getY() * scale), 1, false, 1);
-			client.getCanvas().dispatchEvent(mouseClicked);
-		}
-		else
-		{
-			if (client.getMouseCanvasPosition().getX() != x ||
-				client.getMouseCanvasPosition().getY() != y)
-			{
-				moveMouse(x, y);
-			}
-			MouseEvent mousePressed = new MouseEvent(client.getCanvas(), 501, System.currentTimeMillis(), 0, client.getMouseCanvasPosition().getX(), client.getMouseCanvasPosition().getY(), 1, false, 1);
-			client.getCanvas().dispatchEvent(mousePressed);
-			MouseEvent mouseReleased = new MouseEvent(client.getCanvas(), 502, System.currentTimeMillis(), 0, client.getMouseCanvasPosition().getX(), client.getMouseCanvasPosition().getY(), 1, false, 1);
-			client.getCanvas().dispatchEvent(mouseReleased);
-			MouseEvent mouseClicked = new MouseEvent(client.getCanvas(), 500, System.currentTimeMillis(), 0, client.getMouseCanvasPosition().getX(), client.getMouseCanvasPosition().getY(), 1, false, 1);
-			client.getCanvas().dispatchEvent(mouseClicked);
-		}
-	}
-
-	private void moveMouse(int x, int y)
-	{
-		MouseEvent mouseEntered = new MouseEvent(client.getCanvas(), 504, System.currentTimeMillis(), 0, x, y, 0, false);
-		client.getCanvas().dispatchEvent(mouseEntered);
-		MouseEvent mouseExited = new MouseEvent(client.getCanvas(), 505, System.currentTimeMillis(), 0, x, y, 0, false);
-		client.getCanvas().dispatchEvent(mouseExited);
-		MouseEvent mouseMoved = new MouseEvent(client.getCanvas(), 503, System.currentTimeMillis(), 0, x, y, 0, false);
-		client.getCanvas().dispatchEvent(mouseMoved);
-	}
-
-	private Point getClickPoint(Rectangle rect)
-	{
-		double scalingFactor = configManager.getConfig(StretchedModeConfig.class).scalingFactor();
-
-		int rand = (Math.random() <= 0.5) ? 1 : 2;
-		int x = (int) (rect.getX() + (rand * 3) + rect.getWidth() / 2);
-		int y = (int) (rect.getY() + (rand * 3) + rect.getHeight() / 2);
-
-		double scale = 1 + (scalingFactor / 100);
-
-		if (client.isStretchedEnabled())
-		{
-			return new Point((int) (x * scale), (int) (y * scale));
-		}
-
-		return new Point(x, y);
 	}
 
 	private final HotkeyListener one = new HotkeyListener(() -> config.customOne())

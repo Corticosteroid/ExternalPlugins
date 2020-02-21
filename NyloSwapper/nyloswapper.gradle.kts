@@ -1,5 +1,3 @@
-import ProjectVersions.rlVersion
-
 /*
  * Copyright (c) 2019 Owain van Brakel <https://github.com/Owain94>
  * Copyright (c) 2019 Ganom <https://github.com/Ganom>
@@ -26,23 +24,23 @@ import ProjectVersions.rlVersion
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-version = rlVersion
+version = "5.7.0"
 
 project.extra["PluginName"] = "NyloSwapper"
 project.extra["PluginDescription"] = "Nylo Swapper."
 
 dependencies {
     annotationProcessor(Libraries.lombok)
-
-    implementation("com.openosrs:runelite-api:$rlVersion")
-    implementation("com.openosrs:runelite-client:$rlVersion")
-
-    implementation(Libraries.guice)
-    implementation(Libraries.lombok)
-    implementation(Libraries.pf4j)
-    implementation(Libraries.okhttp3)
-    implementation(Libraries.apacheCommonsText)
-    implementation(Libraries.rxjava)
+    annotationProcessor(Libraries.pf4j)
+    compileOnly(project(":ExtUtils"))
+    compileOnly("com.github.open-osrs.runelite:runelite-api:-SNAPSHOT")
+    compileOnly("com.github.open-osrs.runelite:runelite-client:-SNAPSHOT")
+    compileOnly(Libraries.guice)
+    compileOnly(Libraries.lombok)
+    compileOnly(Libraries.pf4j)
+    compileOnly(Libraries.okhttp3)
+    compileOnly(Libraries.apacheCommonsText)
+    compileOnly(Libraries.rxjava)
 }
 
 tasks {
@@ -52,6 +50,7 @@ tasks {
                     "Plugin-Version" to project.version,
                     "Plugin-Id" to nameToId(project.extra["PluginName"] as String),
                     "Plugin-Provider" to project.extra["PluginProvider"],
+                    "Plugin-Dependencies" to nameToId("extutils"),
                     "Plugin-Description" to project.extra["PluginDescription"],
                     "Plugin-License" to project.extra["PluginLicense"]
             ))

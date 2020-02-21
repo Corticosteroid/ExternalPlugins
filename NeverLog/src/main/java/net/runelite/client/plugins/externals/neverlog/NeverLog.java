@@ -15,11 +15,13 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.PluginType;
+import org.pf4j.Extension;
 
+@Extension
 @PluginDescriptor(
 	name = "Never Log",
 	description = "Enable this and you will never log out",
-	type = PluginType.EXTERNAL
+	type = PluginType.UTILITY
 )
 @SuppressWarnings("unused")
 public class NeverLog extends Plugin

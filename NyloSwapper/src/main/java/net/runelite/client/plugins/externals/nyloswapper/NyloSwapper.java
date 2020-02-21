@@ -6,7 +6,9 @@
 package net.runelite.client.plugins.externals.nyloswapper;
 
 import com.google.inject.Provides;
+import java.awt.AWTException;
 import java.awt.Rectangle;
+import java.awt.Robot;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -29,25 +31,25 @@ import net.runelite.api.widgets.WidgetItem;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
-import net.runelite.client.flexo.Flexo;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.plugins.Plugin;
+import net.runelite.client.plugins.PluginDependency;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.PluginType;
-import net.runelite.client.plugins.externals.nyloswapper.utils.ExtUtils;
-import net.runelite.client.plugins.externals.nyloswapper.utils.Tab;
-import net.runelite.client.plugins.externals.nyloswapper.utils.TabUtils;
-import net.runelite.client.plugins.stretchedmode.StretchedModeConfig;
+import net.runelite.client.plugins.externals.utils.ExtUtils;
+import net.runelite.client.plugins.externals.utils.Tab;
+import org.pf4j.Extension;
 
+@Extension
 @PluginDescriptor(
 	name = "Nylo Swapper",
 	description = "Nylo Swapper",
 	tags = {"tob", "theatre", "blood", "cheats"},
-	enabledByDefault = false,
-	type = PluginType.EXTERNAL
+	type = PluginType.UTILITY
 )
 @Slf4j
 @SuppressWarnings("unused")
+@PluginDependency(ExtUtils.class)
 public class NyloSwapper extends Plugin
 {
 	@Inject
@@ -61,9 +63,9 @@ public class NyloSwapper extends Plugin
 	@Inject
 	private EventBus eventBus;
 	@Inject
-	private TabUtils tabUtils;
+	private ExtUtils utils;
 
-	private Flexo flexo;
+	private Robot robot;
 	private BlockingQueue<Runnable> queue = new ArrayBlockingQueue<>(1);
 	private ThreadPoolExecutor executorService = new ThreadPoolExecutor(1, 1, 2, TimeUnit.SECONDS, queue,
 		new ThreadPoolExecutor.DiscardPolicy());
@@ -77,36 +79,24 @@ public class NyloSwapper extends Plugin
 
 	private List<WidgetItem> getMage()
 	{
-		return ExtUtils.getItems(ExtUtils.stringToIntArray(config.mage()), client);
+		return utils.getItems(utils.stringToIntArray(config.mage()));
 	}
 
 	private List<WidgetItem> getRange()
 	{
-		return ExtUtils.getItems(ExtUtils.stringToIntArray(config.range()), client);
+		return utils.getItems(utils.stringToIntArray(config.range()));
 	}
 
 	private List<WidgetItem> getMelee()
 	{
-		return ExtUtils.getItems(ExtUtils.stringToIntArray(config.melee()), client);
+		return utils.getItems(utils.stringToIntArray(config.melee()));
 	}
 
 	@Override
-	protected void startUp()
+	protected void startUp() throws AWTException
 	{
+		robot = new Robot();
 		reset();
-		Flexo.client = client;
-		executorService.submit(() ->
-		{
-			flexo = null;
-			try
-			{
-				flexo = new Flexo();
-			}
-			catch (Exception e)
-			{
-				e.printStackTrace();
-			}
-		});
 	}
 
 	@Override
@@ -139,19 +129,37 @@ public class NyloSwapper extends Plugin
 			case NpcID.NYLOCAS_VASILIAS_8355:
 			{
 				final Rectangle bounds = npc.getConvexHull().getBounds();
-				executorService.submit(() -> handleNylo(getMelee(), Prayer.PROTECT_FROM_MELEE, Prayer.PIETY, bounds, "Melee Nylo Detected"));
+				executorService.submit(() -> handleNylo(
+					getMelee(),
+					Prayer.PROTECT_FROM_MELEE,
+					Prayer.PIETY,
+					bounds,
+					"Melee Nylo Detected"
+				));
 			}
 			break;
 			case NpcID.NYLOCAS_VASILIAS_8356:
 			{
 				final Rectangle bounds = npc.getConvexHull().getBounds();
-				executorService.submit(() -> handleNylo(getRange(), Prayer.PROTECT_FROM_MISSILES, Prayer.RIGOUR, bounds, "Ranged Nylo Detected"));
+				executorService.submit(() -> handleNylo(
+					getRange(),
+					Prayer.PROTECT_FROM_MISSILES,
+					Prayer.RIGOUR,
+					bounds,
+					"Ranged Nylo Detected"
+				));
 			}
 			break;
 			case NpcID.NYLOCAS_VASILIAS_8357:
 			{
 				final Rectangle bounds = npc.getConvexHull().getBounds();
-				executorService.submit(() -> handleNylo(getMage(), Prayer.PROTECT_FROM_MAGIC, Prayer.AUGURY, bounds, "Mage Nylo Detected"));
+				executorService.submit(() -> handleNylo(
+					getMage(),
+					Prayer.PROTECT_FROM_MAGIC,
+					Prayer.AUGURY,
+					bounds,
+					"Mage Nylo Detected"
+				));
 			}
 			break;
 		}
@@ -192,11 +200,19 @@ public class NyloSwapper extends Plugin
 		}
 		if (nyloBounds != null)
 		{
-			handleSwitch(nyloBounds);
+			utils.click(nyloBounds);
+			try
+			{
+				Thread.sleep(getMillis());
+			}
+			catch (InterruptedException e)
+			{
+				e.printStackTrace();
+			}
 		}
 		if (config.backToInventory())
 		{
-			flexo.keyPress(tabUtils.getTabHotkey(Tab.INVENTORY));
+			robot.keyPress(utils.getTabHotkey(Tab.INVENTORY));
 		}
 		log.info(logs);
 	}
@@ -216,7 +232,7 @@ public class NyloSwapper extends Plugin
 	{
 		if (client.getWidget(WidgetInfo.INVENTORY).isHidden())
 		{
-			flexo.keyPress(tabUtils.getTabHotkey(Tab.INVENTORY));
+			robot.keyPress(utils.getTabHotkey(Tab.INVENTORY));
 		}
 		if (itemList.isEmpty())
 		{
@@ -226,14 +242,22 @@ public class NyloSwapper extends Plugin
 		{
 			if (item != null)
 			{
-				handleSwitch(item.getCanvasBounds());
+				utils.click(item.getCanvasBounds());
+				try
+				{
+					Thread.sleep(getMillis());
+				}
+				catch (InterruptedException e)
+				{
+					e.printStackTrace();
+				}
 			}
 		}
 	}
 
 	private void clickWidget(WidgetInfo widgetInfo, Tab tab)
 	{
-		flexo.keyPress(tabUtils.getTabHotkey(tab));
+		robot.keyPress(utils.getTabHotkey(tab));
 
 		if (widgetInfo != null)
 		{
@@ -241,19 +265,22 @@ public class NyloSwapper extends Plugin
 
 			if (widget != null)
 			{
-				handleSwitch(widget.getBounds());
+				utils.click(widget.getBounds());
+				try
+				{
+					Thread.sleep(getMillis());
+				}
+				catch (InterruptedException e)
+				{
+					e.printStackTrace();
+				}
 			}
 		}
 	}
 
-	private void handleSwitch(Rectangle rectangle)
-	{
-		ExtUtils.handleSwitch(rectangle, config.actionType(), flexo, client, configManager.getConfig(StretchedModeConfig.class).scalingFactor(), (int) getMillis());
-	}
-
 	private void reset()
 	{
-		flexo = null;
+		robot = null;
 		nylo = null;
 	}
 
